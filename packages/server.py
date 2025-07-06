@@ -65,40 +65,38 @@ class Server():
                 match = pattern.match(path)
                 if not match:
                     continue
-                try:
-                    if method == 'GET':
-                        params = match.groupdict()
+            
+                if method == 'GET':
+                    params = match.groupdict()
+                    response_body = func(**params)
+
+                elif method == 'POST':
+                    headers = {}
+                    for line in request_lines[1:]:
+                        if ':' in line:
+                            key, value = line.split(':', 1)
+                            headers[key.strip().lower()] = value.strip()
+                    url_params = match.groupdict()
+                    content_type_header = headers.get("content-type", "")
+                    if "application/json" in content_type_header:
+                        try:
+                            json_body = json.loads(body) if body else {}
+                        except json.JSONDecodeError:
+                            json_body = {}
+                        params = {**url_params, **json_body}
                         response_body = func(**params)
+                    elif "text/plain" in content_type_header:
+                        response_body = func(body, **url_params)
 
-                    elif method == 'POST':
-                        headers = {}
-                        for line in request_lines[1:]:
-                            if ':' in line:
-                                key, value = line.split(':', 1)
-                                headers[key.strip().lower()] = value.strip()
-                        url_params = match.groupdict()
-                        content_type_header = headers.get("content-type", "")
-                        if "application/json" in content_type_header:
-                            try:
-                                json_body = json.loads(body) if body else {}
-                            except json.JSONDecodeError:
-                                json_body = {}
-                            params = {**url_params, **json_body}
-                            response_body = func(**params)
-                        elif "text/plain" in content_type_header:
-                            response_body = func(body, **url_params)
+                    else:
+                        response_body = func(**url_params)
+                content_type = type_handler(response_body)
 
-                        else:
-                            response_body = func(**url_params)
-                    content_type = type_handler(response_body)
-
-                    if isinstance(response_body, dict):
-                        response_body = json.dumps(response_body)
-                    print("CLient sent:",response_body)
-                    response = response_handler(200, response_body, content_type)
-                except Exception as e:
-                    response = response_handler(500, f"Internal Server Error: {e}", "text/plain")
-                break
+                if isinstance(response_body, dict):
+                    response_body = json.dumps(response_body)
+                print("CLient sent:",response_body)
+                response = response_handler(200, response_body, content_type)
+            
 
             client.sendall(response.encode())
         finally:
